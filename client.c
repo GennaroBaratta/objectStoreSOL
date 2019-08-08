@@ -15,7 +15,7 @@ char* testStr =
 int successes = 0;
 
 void store(char* clientName) {
-  char* nameFile = malloc(strlen(clientName) + 4);
+  char* nameFile = calloc(strlen(clientName) + 4, sizeof(char));
   strcpy(nameFile, clientName);
   strcat(nameFile, "_aa");
   if (os_store(nameFile, testStr, strlen(testStr)) == -1) {
@@ -23,6 +23,21 @@ void store(char* clientName) {
     free(nameFile);
     exit(errno);
   }
+  free(nameFile);
+}
+
+void retrive(char* clientName) {
+  char* nameFile = calloc(strlen(clientName) + 4, sizeof(char));
+  strcpy(nameFile, clientName);
+  strcat(nameFile, "_aa");
+  char** data = os_retrive(nameFile);
+  if (data == NULL) {
+    perror("retrive");
+    free(nameFile);
+    exit(errno);
+  }
+  printf("%s\n",*data);
+  free(*data);
   free(nameFile);
 }
 
@@ -37,7 +52,7 @@ int main(int argc, char* argv[]) {
         store(argv[1]);
         break;
       case 2:
-        // retrive
+        retrive(argv[1]);
         break;
       case 3:
         // delete

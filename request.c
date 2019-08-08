@@ -55,7 +55,10 @@ int handle_store(char* path, void* block, size_t len) {
   return 0;
 }
 
-int handle_retrive(char* name);
+int handle_retrive(char* path) {
+  printf("pathFile: %s\n", path);
+  return 0;
+}
 
 int handle_delete(char* name);
 

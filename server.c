@@ -53,6 +53,8 @@ void* clientHandler(void* arg) {
 
   char name[BUFSIZE];
   char nameFile[BUFSIZE];
+
+  char* pathFile;
   do {
     memset(response, 0, BUFSIZE);
     memset(buf, 0, BUFSIZE);
@@ -101,9 +103,8 @@ void* clientHandler(void* arg) {
         if (ret > 0) {
           strcat(file, bufferino);
         }
-        char* pathFile =
-            calloc(strlen("data/") + strlen(name) + strlen(nameFile) + 2,
-                   sizeof(char));
+        pathFile = calloc(strlen("data/") + strlen(name) + strlen(nameFile) + 2,
+                          sizeof(char));
         strcpy(pathFile, "data/");
         strcat(pathFile, name);
         strcat(pathFile, "/");
@@ -115,14 +116,33 @@ void* clientHandler(void* arg) {
         } else {
           strcpy(response, "KO \n");
         }
+        free(pathFile);
+        free(file);
         free(bufferino);
         break;
       case RETRIVE:
+
+        CHECKNULL(token, strtok_r(NULL, " ", &tokHeader), "tokName");
+        strcpy(nameFile, token);
+
+        pathFile = calloc(strlen("data/") + strlen(name) + strlen(nameFile) + 2,
+                          sizeof(char));
+        strcpy(pathFile, "data/");
+        strcat(pathFile, name);
+        strcat(pathFile, "/");
+        strcat(pathFile, nameFile);
+
+        ret = handle_retrive(pathFile);
+        if (ret == 0) {
+          strcpy(response, "DATA 14 \nINIZIO-_-_FINE");
+        } else {
+          strcpy(response, "KO \n");
+        }
+        free(pathFile);
         break;
       case DELETE:
         break;
       case LEAVE:
-
         if (handle_disconnect(name) == 0) {
           strcpy(response, "OK \n");
         } else {
@@ -133,137 +153,11 @@ void* clientHandler(void* arg) {
       default:
         printf("Error! header [%s] is not correct\n", header);
     }
-    SYSCALL(ret, writen(fd, response, strnlen(response, BUFSIZE) - 1), "write");
+    SYSCALL(ret, writen(fd, response, strnlen(response, BUFSIZE) ), "write");
   } while (leave != 1);
   close(fd);
   return (NULL);
 }
-
-/*
-void* clientHandler(void* arg) {
-  int ret;
-  char buf[BUFSIZE];
-  char* saveprt;
-  char* saveprt1;
-  char* cmd;
-  char response[BUFSIZE];
-  char *token = NULL, *token1 = NULL;
-  char tmpData[BUFSIZE];
-
-  char header[BUFSIZE];
-
-  char *name, *nameFile, *dirname = NULL, *pathFile;
-  size_t lenFile;
-  char* dataFile;
-  FILE* file;
-
-  long fd = (long)arg;
-
-  int detachResult = pthread_detach(pthread_self());
-  assert(detachResult == 0);
-  do {
-    memset(response, 0, BUFSIZE);
-    memset(buf, 0, BUFSIZE);
-    SYSCALL(ret, read(fd, buf, BUFSIZE), "first read ");
-    if (ret < 1)
-      break;
-
-    token = strtok_r(buf, "\n", &saveprt1);
-    strcpy(header, token);
-
-    token1 = strtok_r(NULL, "", &saveprt1);
-    if (token1 != NULL) {
-      strcpy(tmpData, token1);
-    }
-    cmd = strtok_r(token, " ", &saveprt);
-    switch (parseCmd(cmd)) {
-      case REGISTER:
-        token = strtok_r(NULL, " ", &saveprt);
-
-        name = malloc(sizeof(char) * strlen(token) + 1);
-        strcpy(name, token);
-
-        dirname = malloc(sizeof(char) * (strlen(name) + strlen("data/")) + 1);
-        strcpy(dirname, "data/");
-        strncat(dirname, name, BUFSIZE);
-        if (mkdir(dirname, 0777) && errno != EEXIST) {
-          strncpy(response, "KO error while trying to create data directory \n",
-                  BUFSIZE);
-        } else if (icl_hash_insert(usersTable, name, arg) != NULL) {
-          strcpy(response, "OK \n");
-        } else {
-          if (icl_hash_find(usersTable, name) != NULL)
-            strcpy(response, "OK \n");
-          else
-            strcpy(response, "KO error on hash table\n");
-        }
-        strcpy(response, "OK \n");
-        break;
-      case STORE:
-        CHECKNULL(token, strtok_r(NULL, " ", &saveprt), "strtok_r");
-        CHECKNULL(nameFile, malloc(sizeof(char*) * (strlen(token) + 1)),
-                  "malloc nameFile");
-        strcpy(nameFile, token);
-        lenFile = strtol(strtok_r(NULL, " ", &saveprt), NULL, 10);
-
-        if (errno == EINVAL || errno == ERANGE) {
-          strcpy(response, "KO error on data length\n");
-        } else {
-          CHECKNULL(dataFile, malloc((lenFile + 1) * sizeof(char)),
-                    "malloc datafile");
-          memset(dataFile, 0, lenFile);
-          int tmpDataLen = 0;
-
-          strcat(dataFile, tmpData);
-
-          char bufferino[lenFile - tmpDataLen + 1];
-          SYSCALL(ret, readn(fd, bufferino, lenFile - tmpDataLen),
-                  "readn file");
-          strncat(dataFile, bufferino, BUFSIZE);
-          pathFile =
-              calloc(strlen(dirname) + strlen(nameFile) + 2, sizeof(char));
-          strcpy(pathFile, dirname);
-          strcat(pathFile, "/");
-          strcat(pathFile, nameFile);
-
-          file = fopen(pathFile, "w");
-          if (file == NULL) {
-            perror("fopen store");
-            strcpy(response, "KO error on write file\n");
-          } else {
-            fwrite(dataFile, sizeof(char), lenFile, file);
-            fclose(file);
-            strcpy(response, "OK \n");
-          }
-          free(nameFile);
-          free(dataFile);
-          free(pathFile);
-        }
-        break;
-      case RETRIVE:
-        break;
-      case DELETE:
-        break;
-      case LEAVE:
-        fflush(stdout);
-        free(dirname);
-        close(fd);
-        return (NULL);
-        break;
-      default:
-        printf("Error! operator [%s] with header [%s] is not correct\n", cmd,
-               header);
-    }
-    SYSCALL(ret, writen(fd, response, strnlen(response, BUFSIZE) - 1), "write");
-  } while (1);
-
-  if (dirname)
-    free(dirname);
-  printf("fd %li not reachable\n", fd);
-  fflush(stdout);
-  close(fd);
-  return (NULL);
-}*/
 
 int setNoBlocking(int fd) {
   int flags;

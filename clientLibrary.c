@@ -1,5 +1,7 @@
+#define _POSIX_C_SOURCE 200809L
 #include <assert.h>
 #include <clientLibrary.h>
+#include <string.h>
 
 int sockfd;
 int notused, n;
@@ -57,4 +59,33 @@ int os_store(char* name, void* block, size_t len) {
   printf("result: %s\n", buf);
   fflush(stdout);
   return strncmp(buf, "OK", 2);
+}
+
+void* os_retrive(char* name) {
+  assert(name);
+  char buf[BUFSIZE] = "";
+  char** data;
+  char *token, *tokptr;
+
+  strcat(buf, "RETRIVE ");
+  strcat(buf, name);
+  strcat(buf, " \n");
+
+  SYSCALL(notused, writen(sockfd, buf, strlen(buf)), "writen client");
+
+  memset(buf, 0, BUFSIZE);
+  SYSCALL(n, read(sockfd, buf, BUFSIZE - 1), "read client");
+  token = strtok_r(buf, " ", &tokptr);
+  if (strncmp(token, "KO", 2) == 0) {
+    return NULL;
+  }
+  token = strtok_r(NULL, "\n", &tokptr);
+  size_t len = strtol(token, NULL, 10);
+  token = strtok_r(NULL, "", &tokptr);
+  data = malloc(sizeof(data));
+  *data = calloc(len + 1, sizeof(char));
+  strcpy(*data, token);
+  printf("result:%s\n", token);
+  fflush(stdout);
+  return data;
 }
