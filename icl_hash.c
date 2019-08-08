@@ -120,14 +120,49 @@ void* icl_hash_find(icl_hash_t* ht, void* key) {
     return NULL;
 
   hash_val = (*ht->hash_function)(key) % ht->nbuckets;
-  pthread_rwlock_rdlock(&(ht->listrwlockes[hash_val % (ht->nbuckets/mutexFactor)]));
+  pthread_rwlock_rdlock(
+      &(ht->listrwlockes[hash_val % (ht->nbuckets / mutexFactor)]));
   for (curr = ht->buckets[hash_val]; curr != NULL; curr = curr->next)
     if (ht->hash_key_compare(curr->key, key)) {
-      pthread_rwlock_unlock(&(ht->listrwlockes[hash_val % (ht->nbuckets/mutexFactor)]));
+      pthread_rwlock_unlock(
+          &(ht->listrwlockes[hash_val % (ht->nbuckets / mutexFactor)]));
       return (curr->data);
     }
-  pthread_rwlock_unlock(&(ht->listrwlockes[hash_val % (ht->nbuckets/mutexFactor)]));
+  pthread_rwlock_unlock(
+      &(ht->listrwlockes[hash_val % (ht->nbuckets / mutexFactor)]));
   return NULL;
+}
+
+/**
+ * Update an item into the hash table.
+ *
+ * @param ht -- the hash table
+ * @param key -- the key of the new item
+ * @param data -- pointer to the new item's data
+ *
+ * @returns 0 on success  Returns -1 on error.
+ */
+
+int icl_hash_update(icl_hash_t* ht, void* key, void* newData) {
+  icl_entry_t* curr;
+  unsigned int hash_val;
+
+  if (!ht || !key)
+    return -1;
+
+  hash_val = (*ht->hash_function)(key) % ht->nbuckets;
+  pthread_rwlock_wrlock(
+      &(ht->listrwlockes[hash_val % (ht->nbuckets / mutexFactor)]));
+  for (curr = ht->buckets[hash_val]; curr != NULL; curr = curr->next)
+    if (ht->hash_key_compare(curr->key, key)) {
+      curr->data = newData;
+      pthread_rwlock_unlock(
+          &(ht->listrwlockes[hash_val % (ht->nbuckets / mutexFactor)]));
+      return 0;
+    }
+  pthread_rwlock_unlock(
+      &(ht->listrwlockes[hash_val % (ht->nbuckets / mutexFactor)]));
+  return -1;
 }
 
 /**
@@ -149,17 +184,20 @@ icl_entry_t* icl_hash_insert(icl_hash_t* ht, void* key, void* data) {
 
   hash_val = (*ht->hash_function)(key) % ht->nbuckets;
 
-  pthread_rwlock_rdlock(&(ht->listrwlockes[hash_val % (ht->nbuckets/mutexFactor)]));
+  pthread_rwlock_rdlock(
+      &(ht->listrwlockes[hash_val % (ht->nbuckets / mutexFactor)]));
   for (curr = ht->buckets[hash_val]; curr != NULL; curr = curr->next)
     if (ht->hash_key_compare(curr->key, key)) {
-      pthread_rwlock_unlock(&(ht->listrwlockes[hash_val % (ht->nbuckets/mutexFactor)]));
+      pthread_rwlock_unlock(
+          &(ht->listrwlockes[hash_val % (ht->nbuckets / mutexFactor)]));
       return (NULL); /* key already exists */
     }
 
   /* if key was not found */
   curr = (icl_entry_t*)malloc(sizeof(icl_entry_t));
   if (!curr) {
-    pthread_rwlock_unlock(&(ht->listrwlockes[hash_val % (ht->nbuckets/mutexFactor)]));
+    pthread_rwlock_unlock(
+        &(ht->listrwlockes[hash_val % (ht->nbuckets / mutexFactor)]));
     return NULL;
   }
 
@@ -167,11 +205,14 @@ icl_entry_t* icl_hash_insert(icl_hash_t* ht, void* key, void* data) {
   curr->data = data;
   curr->next = ht->buckets[hash_val]; /* add at start */
 
-  pthread_rwlock_unlock(&(ht->listrwlockes[hash_val % (ht->nbuckets/mutexFactor)]));
+  pthread_rwlock_unlock(
+      &(ht->listrwlockes[hash_val % (ht->nbuckets / mutexFactor)]));
 
-  pthread_rwlock_wrlock(&(ht->listrwlockes[hash_val % (ht->nbuckets/mutexFactor)]));
+  pthread_rwlock_wrlock(
+      &(ht->listrwlockes[hash_val % (ht->nbuckets / mutexFactor)]));
   ht->buckets[hash_val] = curr;
-  pthread_rwlock_unlock(&(ht->listrwlockes[hash_val % (ht->nbuckets/mutexFactor)]));
+  pthread_rwlock_unlock(
+      &(ht->listrwlockes[hash_val % (ht->nbuckets / mutexFactor)]));
 
   pthread_mutex_lock(&(ht->fieldMutex));
   ht->nentries++;
@@ -204,7 +245,8 @@ int icl_hash_delete(icl_hash_t* ht,
 
   prev = NULL;
 
-  pthread_rwlock_wrlock(&(ht->listrwlockes[hash_val % (ht->nbuckets/mutexFactor)]));
+  pthread_rwlock_wrlock(
+      &(ht->listrwlockes[hash_val % (ht->nbuckets / mutexFactor)]));
   for (curr = ht->buckets[hash_val]; curr != NULL;) {
     if (ht->hash_key_compare(curr->key, key)) {
       if (prev == NULL) {
@@ -219,14 +261,16 @@ int icl_hash_delete(icl_hash_t* ht,
       ht->nentries++;
       free(curr);
 
-      pthread_rwlock_unlock(&(ht->listrwlockes[hash_val % (ht->nbuckets/mutexFactor)]));
+      pthread_rwlock_unlock(
+          &(ht->listrwlockes[hash_val % (ht->nbuckets / mutexFactor)]));
       return 0;
     }
     prev = curr;
     curr = curr->next;
   }
 
-  pthread_rwlock_unlock(&(ht->listrwlockes[hash_val % (ht->nbuckets/mutexFactor)]));
+  pthread_rwlock_unlock(
+      &(ht->listrwlockes[hash_val % (ht->nbuckets / mutexFactor)]));
   return -1;
 }
 
@@ -286,7 +330,8 @@ int icl_hash_dump(FILE* stream, icl_hash_t* ht) {
     return -1;
 
   for (i = 0; i < ht->nbuckets; i++) {
-    pthread_rwlock_rdlock(&(ht->listrwlockes[i % (ht->nbuckets/mutexFactor)]));
+    pthread_rwlock_rdlock(
+        &(ht->listrwlockes[i % (ht->nbuckets / mutexFactor)]));
     bucket = ht->buckets[i];
     for (curr = bucket; curr != NULL;) {
       if (curr->key)
@@ -295,7 +340,8 @@ int icl_hash_dump(FILE* stream, icl_hash_t* ht) {
       curr = curr->next;
     }
 
-    pthread_rwlock_unlock(&(ht->listrwlockes[i % (ht->nbuckets/mutexFactor)]));
+    pthread_rwlock_unlock(
+        &(ht->listrwlockes[i % (ht->nbuckets / mutexFactor)]));
   }
 
   return 0;

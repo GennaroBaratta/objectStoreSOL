@@ -12,11 +12,13 @@ TARGETS		= server \
 
 OBJECTS		= clientLibrary.o \
 				communication.o \
-				icl_hash.o
+				icl_hash.o \
+				request.o
 
 INCLUDE_FILES	= clientLibrary.h \
 				communication.h \
-				icl_hash.h
+				icl_hash.h \
+				request.h
 				  
 
 .PHONY: all clean cleanall

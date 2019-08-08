@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <clientLibrary.h>
 
 int sockfd;
@@ -20,20 +21,25 @@ int os_connect(char* name) {
   strcat(buf, name);
   strcat(buf, " \n");
 
-  SYSCALL(notused, writen(sockfd, buf, strlen(buf)), "writen");
+  SYSCALL(notused, writen(sockfd, buf, strlen(buf)), "writen client");
   memset(buf, 0, BUFSIZE);
-  SYSCALL(n, read(sockfd, buf, BUFSIZE), "read");
+  SYSCALL(n, read(sockfd, buf, BUFSIZE), "read client");
   printf("result: %s\n", buf);
   return strncmp(buf, "OK", 2);
 }
 
 int os_disconnect() {
+  char buf[BUFSIZE];
   SYSCALL(notused, writen(sockfd, "LEAVE \n", 8), "writen");
+  SYSCALL(n, read(sockfd, buf, BUFSIZE), "read client");
+  printf("result: %s\n", buf);
+  fflush(stdout);
   close(sockfd);
-  return 0;
+  return strncmp(buf, "OK", 2);
 }
 
 int os_store(char* name, void* block, size_t len) {
+  assert(block);
   char buf[BUFSIZE] = "";
   char strNum[20];
 
@@ -43,10 +49,12 @@ int os_store(char* name, void* block, size_t len) {
   strcat(buf, strNum);
   strcat(buf, " \n");
 
-  SYSCALL(notused, writen(sockfd, buf, strlen(buf)), "writen");
-  SYSCALL(notused, writen(sockfd, block, len), "writen");
+  SYSCALL(notused, writen(sockfd, buf, strlen(buf)), "writen client");
+  SYSCALL(notused, writen(sockfd, block, len), "writen client");
+
   memset(buf, 0, BUFSIZE);
-  SYSCALL(n, read(sockfd, buf, BUFSIZE), "read");
+  SYSCALL(n, read(sockfd, buf, BUFSIZE), "read client");
   printf("result: %s\n", buf);
+  fflush(stdout);
   return strncmp(buf, "OK", 2);
 }

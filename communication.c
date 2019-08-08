@@ -20,7 +20,6 @@ int readn(long fd, void* buf, size_t size) {
       }
       return -1;
     }
-    printf("str: %s", bufptr);
     if (r == 0)
       return 0;  // gestione chiusura socket
     left -= r;
