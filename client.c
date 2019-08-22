@@ -118,10 +118,13 @@ int main(int argc, char* argv[]) {
     return -1;
   }
 
+  kbytesStores /= 1000;
+  kbytesRetrives /= 1000;
+
   printf(
-      "---Client:\t%s\n---Stores:\t%d\n---Retrives:\t%d\n---Deletes:\t%d\n---"
-      "Successes:\t%d\n---Failures:\t%"
-      "d\n---Stored KB:\t%zu\n---Retrived KB:\t%zu\n\n",
+      "---Client: %s\n---Stores: %d\n---Retrives: %d\n---Deletes: %"
+      "d\n---Successes: %d\n---Failures: %d\n---Stored "
+      "KB: %zu\n---Retrived KB: %zu\n\n",
       argv[1], nstores, nretrives, ndeletes, successes, failures, kbytesStores,
       kbytesRetrives);
   free(nameFile);

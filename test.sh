@@ -3,7 +3,7 @@
 sleep 1
 numClient=50
 for ((i = 1; i <= $numClient; i++)); do
-    ./client usr_$i 1 &
+    ./client usr_$i 1 >> testout.log &
     pids[$i]=$!
 done
 
@@ -16,13 +16,13 @@ done
 
 echo "... retrive"
 for ((i = 1; i <= $numClient - 20; i++)); do
-    ./client usr_$i 2 &
+    ./client usr_$i 2 >> testout.log &
     pids[$i]=$!
 done
 
 echo "...delete"
 for ((i = 31; i <= $numClient; i++)); do
-    ./client usr_$i 3 &
+    ./client usr_$i 3 >> testout.log &
     pids[$i]=$!
 done
 
