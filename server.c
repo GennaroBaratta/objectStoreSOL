@@ -22,6 +22,8 @@
 
 #define NUM_THREADS 12
 
+#define MAX_WAIT_TIME_IN_SECONDS (4)
+
 int unused;
 
 int listenfd;
@@ -50,8 +52,20 @@ static void* sig_thread(void* arg) {
         pthread_mutex_lock(&worker_stop_mtx);
         stopFlag = 1;
         pthread_mutex_unlock(&worker_stop_mtx);
+        int ret = 0;
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += MAX_WAIT_TIME_IN_SECONDS;
+        pthread_mutex_lock(&worker_num_mtx);
+        while (worker_num > 0 && ret == 0) {
+          ret = pthread_cond_timedwait(&worker_num_cond, &worker_num_mtx, &ts);
+        }
+        if (ret != 0) {
+          perror("Unable to terminate gracefully the worker threads");
+        }
+        pthread_mutex_unlock(&worker_num_mtx);
 
-        SYSCALL(s, shutdown(listenfd, SHUT_RD), "Error shutdowning");
+        SYSCALL(s, shutdown(listenfd, SHUT_RDWR), "Error shutdowning");
 
         pthread_mutex_lock(&worker_num_mtx);
         worker_num--;
@@ -317,9 +331,17 @@ int main() {
         perror("accept");
       }
     } else {
+      int ret = 0;
+      struct timespec ts;
+      clock_gettime(CLOCK_REALTIME, &ts);
+      ts.tv_sec += MAX_WAIT_TIME_IN_SECONDS;
       pthread_mutex_lock(&worker_num_mtx);
       if (worker_num >= NUM_THREADS) {
-        pthread_cond_wait(&worker_num_cond, &worker_num_mtx);
+        ret = pthread_cond_timedwait(&worker_num_cond, &worker_num_mtx, &ts);
+      }
+      if(ret != 0){
+        perror("Abnormal starvation of threads. Aborting server...");
+        exit(EXIT_FAILURE);
       }
       pthread_create(&tid[worker_num], &attr, &clientHandler, (void*)connfd);
       worker_num++;
