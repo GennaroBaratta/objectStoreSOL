@@ -1,10 +1,5 @@
 #include <communication.h>
 
-struct msg_t {
-  int len;
-  char* str;
-};
-
 int readn(long fd, void* buf, size_t size) {
   size_t left = size;
 

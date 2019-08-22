@@ -10,7 +10,7 @@
  */
 /* $Id: icl_hash.c 2838 2011-11-22 04:25:02Z mfaverge $ */
 /* $UTK_Copyright: $ */
-
+// I added mutexes for concurrency
 #include "icl_hash.h"
 #include <assert.h>
 #include <pthread.h>
@@ -20,6 +20,8 @@
 
 #include <limits.h>
 
+// divider for reducing the total mutexes
+// Ex. nmutexes = nbuckets/mutexFactor
 #define mutexFactor 64
 #define BITS_IN_int (sizeof(int) * CHAR_BIT)
 #define THREE_QUARTERS ((int)((BITS_IN_int * 3) / 4))
@@ -59,7 +61,7 @@ static int string_compare(void* a, void* b) {
 /**
  * Create a new hash table.
  *
- * @param[in] nbuckets -- number of buckets to create
+ * @param[in] nbuckets -- hint number of buckets to create
  * @param[in] hash_function -- pointer to the hashing function to be used
  * @param[in] hash_key_compare -- pointer to the hash key comparison function to
  * be used
@@ -67,20 +69,19 @@ static int string_compare(void* a, void* b) {
  * @returns pointer to new hash table.
  */
 
-icl_hash_t* icl_hash_create(int nbuckets,
+icl_hash_t* icl_hash_create(size_t nbucketsHint,
                             unsigned int (*hash_function)(void*),
                             int (*hash_key_compare)(void*, void*)) {
   icl_hash_t* ht;
-  int i;
+  size_t i;
 
   ht = (icl_hash_t*)malloc(sizeof(icl_hash_t));
   if (!ht)
     return NULL;
 
-  // nbuckets as an hint
-  for (i = 64; i < nbuckets; i *= 2)
+  for (i = 64; i < nbucketsHint; i *= 2)
     ;
-  nbuckets = i;
+  size_t nbuckets = i;
 
   ht->listrwlockes = malloc(nbuckets / mutexFactor * sizeof(pthread_rwlock_t));
   for (i = 0; i < (nbuckets / mutexFactor); i++)
@@ -258,7 +259,9 @@ int icl_hash_delete(icl_hash_t* ht,
         (*free_key)(curr->key);
       if (*free_data && curr->data)
         (*free_data)(curr->data);
-      ht->nentries++;
+      pthread_mutex_lock(&(ht->fieldMutex));
+      ht->nentries--;
+      pthread_mutex_unlock(&(ht->fieldMutex));
       free(curr);
 
       pthread_rwlock_unlock(
@@ -287,7 +290,7 @@ int icl_hash_destroy(icl_hash_t* ht,
                      void (*free_key)(void*),
                      void (*free_data)(void*)) {
   icl_entry_t *bucket, *curr, *next;
-  int i;
+  size_t i;
 
   if (!ht)
     return -1;
@@ -324,7 +327,7 @@ int icl_hash_destroy(icl_hash_t* ht,
 
 int icl_hash_dump(FILE* stream, icl_hash_t* ht) {
   icl_entry_t *bucket, *curr;
-  int i;
+  size_t i;
 
   if (!ht)
     return -1;

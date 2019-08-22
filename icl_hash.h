@@ -25,8 +25,8 @@ typedef struct icl_entry_s {
 } icl_entry_t;
 
 typedef struct icl_hash_s {
-  int nbuckets;
-  int nentries;
+  size_t nbuckets;
+  size_t nentries;
   pthread_rwlock_t* listrwlockes;
   pthread_mutex_t fieldMutex;
   icl_entry_t** buckets;
@@ -34,7 +34,7 @@ typedef struct icl_hash_s {
   int (*hash_key_compare)(void*, void*);
 } icl_hash_t;
 
-icl_hash_t* icl_hash_create(int nbuckets,
+icl_hash_t* icl_hash_create(size_t nbucketsHint,
                             unsigned int (*hash_function)(void*),
                             int (*hash_key_compare)(void*, void*));
 

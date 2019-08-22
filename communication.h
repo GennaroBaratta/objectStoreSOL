@@ -11,6 +11,13 @@
 
 #define SOCKNAME "objstore.sock"
 #define MAXBACKLOG 25
+
+#define ISZERO(r, c, e) \
+  if ((r = c) != 0) {   \
+    perror(e);          \
+    exit(errno);        \
+  }
+
 #define SYSCALL(r, c, e) \
   if ((r = c) == -1) {   \
     perror(e);           \
@@ -23,10 +30,8 @@
   }
 
 #if !defined(BUFSIZE)
-#define BUFSIZE 256
+#define BUFSIZE 512
 #endif
-
-typedef struct msg_t* msg_t;
 
 extern int readn(long fd, void* buf, size_t size);
 

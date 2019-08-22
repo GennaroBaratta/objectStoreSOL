@@ -1,6 +1,9 @@
-#define _POSIX_C_SOURCE 200809L
+//#define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE 700
 #include <assert.h>
 #include <communication.h>
+#include <dirent.h>
+#include <ftw.h>
 #include <icl_hash.h>
 #include <request.h>
 #include <stdio.h>
@@ -10,13 +13,17 @@
 #include <sys/types.h>
 
 icl_hash_t* usersTable;
+static size_t dim = 0;
+static size_t nfiles = 0;
 
 void initTable() {
-  usersTable = icl_hash_create(1024, NULL, NULL);
+  CHECKNULL(usersTable, icl_hash_create(1024, NULL, NULL), "Create hashtable");
 }
 
 int handle_register(char* name) {
-  char* nameForTable = calloc(strlen(name) + 1, sizeof(char));
+  char* nameForTable;
+  CHECKNULL(nameForTable, calloc(strlen(name) + 1, sizeof(char)),
+            "Error on calloc name for table");
   strcpy(nameForTable, name);
 
   if (icl_hash_find(usersTable, nameForTable) != NULL) {  // exists
@@ -44,24 +51,84 @@ int handle_register(char* name) {
 int handle_store(char* path, void* block, size_t len) {
   assert(len == strlen(block));
   FILE* file;
+
   file = fopen(path, "w");
   if (file == NULL) {
-    perror("fopen store");
+    perror(path);
     return -1;
   }
-  fwrite(block, sizeof(char), len, file);
+  size_t now = fwrite(block, sizeof(char), len, file);
+
+  assert(now == len);
   fclose(file);
 
   return 0;
 }
 
-int handle_retrive(char* path) {
-  printf("pathFile: %s\n", path);
+int handle_retrive(char* path, char** res) {
+  FILE* file;
+  file = fopen(path, "r");
+  if (file == NULL) {
+    perror(path);
+    return -1;
+  }
+  size_t readn = 0;
+
+  fseek(file, 0, SEEK_END);   // seek to end of file
+  size_t size = ftell(file);  // get current file pointer
+  assert(size > 0);
+  fseek(file, 0, SEEK_SET);  // seek back to beginning of file
+
+  char* buf = calloc(size + 1, sizeof(char));
+  while (readn < size) {
+    size_t tempReadn = 0;
+    SYSCALL(tempReadn, fread(buf + readn, sizeof(char), size - readn, file),
+            "fread retrive");
+    if (tempReadn == 0) {
+      perror("Error retriving file");
+      break;
+    }
+    readn += tempReadn;
+  }
+  assert(readn == size);
+  *res = calloc(size + sizeof(size) + 1 + strlen("DATA  \n "), sizeof(char));
+
+  sprintf(*res, "DATA %zu \n %s", size, buf);
+
+  free(buf);
+  fclose(file);
   return 0;
 }
 
-int handle_delete(char* name);
+int handle_delete(char* path) {
+  int ret;
+  SYSCALL(ret, remove(path), "remove");
+  return 0;
+}
 
 int handle_disconnect(char* name) {
   return icl_hash_delete(usersTable, name, free, NULL);
+}
+
+static int internal_stats(const char* fpath,
+                          const struct stat* sb,
+                          int typeflag,
+                          struct FTW* ftwbuf) {
+  if (typeflag == FTW_F) {
+    dim += sb->st_size;
+    nfiles++;
+  }
+  return 0;
+}
+
+void handle_print_stats() {
+  int err = nftw("data", &internal_stats, 32, 0);
+  if (err < 0)
+    perror("data");
+
+  pthread_mutex_lock(&(usersTable->fieldMutex));
+  printf("Clients connected: %zu\n", usersTable->nentries);
+  pthread_mutex_unlock(&(usersTable->fieldMutex));
+  printf("Total size: %zu\n", dim);
+  printf("Total files: %zu\n", nfiles);
 }

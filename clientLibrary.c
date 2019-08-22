@@ -19,23 +19,21 @@ int os_connect(char* name) {
           "connect");
 
   char buf[BUFSIZE] = "";
-  strcat(buf, "REGISTER ");
-  strcat(buf, name);
-  strcat(buf, " \n");
+  sprintf(buf, "REGISTER %s \n", name);
 
   SYSCALL(notused, writen(sockfd, buf, strlen(buf)), "writen client");
   memset(buf, 0, BUFSIZE);
   SYSCALL(n, read(sockfd, buf, BUFSIZE), "read client");
-  printf("result: %s\n", buf);
+  // printf("result: %s\n", buf);
   return strncmp(buf, "OK", 2);
 }
 
 int os_disconnect() {
   char buf[BUFSIZE];
+  memset(buf, 0, BUFSIZE);
   SYSCALL(notused, writen(sockfd, "LEAVE \n", 8), "writen");
   SYSCALL(n, read(sockfd, buf, BUFSIZE), "read client");
-  printf("result: %s\n", buf);
-  fflush(stdout);
+  // printf("result: %s\n", buf);
   close(sockfd);
   return strncmp(buf, "OK", 2);
 }
@@ -43,49 +41,70 @@ int os_disconnect() {
 int os_store(char* name, void* block, size_t len) {
   assert(block);
   char buf[BUFSIZE] = "";
-  char strNum[20];
 
-  sprintf(strNum, " %lu", len);
-  strcat(buf, "STORE ");
-  strcat(buf, name);
-  strcat(buf, strNum);
-  strcat(buf, " \n");
+  sprintf(buf, "STORE %s %zu \n", name, len);
 
   SYSCALL(notused, writen(sockfd, buf, strlen(buf)), "writen client");
   SYSCALL(notused, writen(sockfd, block, len), "writen client");
 
   memset(buf, 0, BUFSIZE);
   SYSCALL(n, read(sockfd, buf, BUFSIZE), "read client");
-  printf("result: %s\n", buf);
-  fflush(stdout);
+  // printf("result: %s\n", buf);
   return strncmp(buf, "OK", 2);
 }
 
 void* os_retrive(char* name) {
   assert(name);
-  char buf[BUFSIZE] = "";
-  char** data;
-  char *token, *tokptr;
+  char buf[BUFSIZE];
+  char* data;
+  char *token1, *token2, *token3, *tokptr;
+  int ret;
 
-  strcat(buf, "RETRIVE ");
-  strcat(buf, name);
-  strcat(buf, " \n");
+  sprintf(buf, "RETRIVE %s \n", name);
 
   SYSCALL(notused, writen(sockfd, buf, strlen(buf)), "writen client");
 
   memset(buf, 0, BUFSIZE);
   SYSCALL(n, read(sockfd, buf, BUFSIZE - 1), "read client");
-  token = strtok_r(buf, " ", &tokptr);
-  if (strncmp(token, "KO", 2) == 0) {
+  CHECKNULL(token1, strtok_r(buf, " ", &tokptr), "strtok_r retrive");
+
+  if (strncmp(token1, "KO", 2) == 0) {
     return NULL;
   }
-  token = strtok_r(NULL, "\n", &tokptr);
-  size_t len = strtol(token, NULL, 10);
-  token = strtok_r(NULL, "", &tokptr);
-  data = malloc(sizeof(data));
-  *data = calloc(len + 1, sizeof(char));
-  strcpy(*data, token);
-  printf("result:%s\n", token);
-  fflush(stdout);
+  token2 = strtok_r(NULL, "\n", &tokptr);
+  if (!token2) {
+    printf("---name: %s\t%s %s---\n", name, token1, buf);
+    return NULL;
+  }
+  size_t lenNum = strlen(token2);
+  size_t len = strtol(token2, NULL, 10);
+  token3 = strtok_r(NULL, " ", &tokptr);
+
+  data = calloc(len + 1, sizeof(char));
+  sprintf(data, "%s", token3);
+
+  char* bufferino = calloc(len + 1, sizeof(char));
+  if (len > BUFSIZE - strlen("DATA  \n") - lenNum) {
+    SYSCALL(ret, readn(sockfd, bufferino, len - strlen(token3)), "read file");
+    if (ret > 0) {
+      strcat(data, bufferino);
+    }
+  }
+
+  // printf("result:%s\n", data);
+
+  free(bufferino);
   return data;
+}
+
+int os_delete(char* name) {
+  assert(name);
+  char buf[BUFSIZE] = "";
+  sprintf(buf, "DELETE %s \n", name);
+  SYSCALL(notused, writen(sockfd, buf, strlen(buf)), "writen client");
+
+  memset(buf, 0, BUFSIZE);
+  SYSCALL(n, read(sockfd, buf, BUFSIZE), "read client");
+  // printf("result: %s\n", buf);
+  return strncmp(buf, "OK", 2);
 }
