@@ -56,5 +56,7 @@ printf "Total retrives: %s\n" "${totRetrives}"
 printf "Total deletes: %s\n" "${totDeletes}"
 printf "Total successes: %s\n" "${totSuccess}"
 printf "Total failures: %s\n" "${totFailures}"
-printf "Total stored KB: %s\n" "${totStoredKB}"
-printf "Total retrived KB: %s\n" "${totRetrivedKB}"
+printf "Total stored bytes: %s\n" "${totStoredKB}"
+printf "Total retrived bytes: %s\n" "${totRetrivedKB}"
+
+killall -SIGUSR1 server

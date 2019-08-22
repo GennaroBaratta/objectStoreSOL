@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 void initTable();
+void freeTable();
 
 int handle_register(char* name);
 

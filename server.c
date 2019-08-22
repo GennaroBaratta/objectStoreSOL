@@ -24,8 +24,6 @@
 
 #define MAX_WAIT_TIME_IN_SECONDS (4)
 
-int unused;
-
 int listenfd;
 
 static volatile sig_atomic_t stopFlag = 0;
@@ -57,7 +55,7 @@ static void* sig_thread(void* arg) {
         clock_gettime(CLOCK_REALTIME, &ts);
         ts.tv_sec += MAX_WAIT_TIME_IN_SECONDS;
         pthread_mutex_lock(&worker_num_mtx);
-        while (worker_num > 0 && ret == 0) {
+        while (worker_num > 1 && ret == 0) {
           ret = pthread_cond_timedwait(&worker_num_cond, &worker_num_mtx, &ts);
         }
         if (ret != 0) {
@@ -70,9 +68,9 @@ static void* sig_thread(void* arg) {
         pthread_mutex_lock(&worker_num_mtx);
         worker_num--;
         pthread_mutex_unlock(&worker_num_mtx);
+        return (NULL);
     }
   }
-  return (NULL);
 }
 
 int parseCmd(const char* cmd) {
@@ -89,6 +87,7 @@ int parseCmd(const char* cmd) {
 }
 
 void* clientHandler(void* arg) {
+  int unused;
   long fd = (long)arg;
 
   // tokenizzazione
@@ -260,6 +259,7 @@ void* clientHandler(void* arg) {
 }
 
 int setNoBlocking(int fd) {
+  int unused;
   int flags;
   SYSCALL(flags, fcntl(fd, F_GETFL), "fcntl");
   flags |= O_NONBLOCK;
@@ -268,14 +268,17 @@ int setNoBlocking(int fd) {
 }
 
 void cleanup() {
+  int unused;
   if ((unused = unlink(SOCKNAME)) == -1) {
     if (errno == ENOENT)
       return;
     perror("unlink");
   }
+  freeTable();
 }
 // int argc, char* argv[]
 int main() {
+  int unused;
   pthread_t tid[NUM_THREADS];
   pthread_attr_t attr;
 
@@ -287,6 +290,7 @@ int main() {
 
   // block signal
   SYSCALL(unused, sigemptyset(&set), "Error on sigemptyset");
+  SYSCALL(unused, sigaddset(&set, SIGINT), "Error on sigaddset");
   SYSCALL(unused, sigaddset(&set, SIGQUIT), "Error on sigaddset");
   SYSCALL(unused, sigaddset(&set, SIGUSR1), "Error on sigaddset");
   SYSCALL(unused, sigaddset(&set, SIGTSTP), "Error on sigaddset");
@@ -327,7 +331,7 @@ int main() {
   while (!stopFlag) {
     pthread_mutex_unlock(&worker_stop_mtx);
     if ((connfd = accept(listenfd, (struct sockaddr*)NULL, NULL)) == -1) {
-      if (!(errno == EAGAIN || errno == EWOULDBLOCK)) {
+      if (!(errno == EAGAIN || errno == EWOULDBLOCK || errno == EINVAL)) {
         perror("accept");
       }
     } else {
@@ -339,7 +343,7 @@ int main() {
       if (worker_num >= NUM_THREADS) {
         ret = pthread_cond_timedwait(&worker_num_cond, &worker_num_mtx, &ts);
       }
-      if(ret != 0){
+      if (ret != 0) {
         perror("Abnormal starvation of threads. Aborting server...");
         exit(EXIT_FAILURE);
       }
@@ -359,5 +363,5 @@ int main() {
   }
   pthread_mutex_unlock(&worker_num_mtx);
   SYSCALL(unused, close(listenfd), "Error on close");
-  return 0;
+  exit(EXIT_SUCCESS);
 }

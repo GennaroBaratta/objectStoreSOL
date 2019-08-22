@@ -1,10 +1,10 @@
 CC			= gcc
 AR			= ar
-CFLAGS		+= -std=c99 #-Wall -Wextra -pedantic -g -DMAKE_VALGRIND_HAPPY -fsanitize=thread
+CFLAGS		+= -std=c99 -Wall -Wextra -pedantic -g -DMAKE_VALGRIND_HAPPY -fsanitize=address
 ARFLAGS		= rvs
 INCLUDES	= -I.
 LDFLAGS		= -L.
-OPTFLAGS	= -O3
+OPTFLAGS	= -Og
 LIBS		= -pthread
 
 TARGETS		= server \
@@ -43,16 +43,17 @@ libstore.a: $(OBJECTS)
 		$(AR) $(ARFLAGS) $@ $^
 	
 clean:
-		rm -f $(TARGETS) objstore.sock
+		rm -f $(TARGETS) objstore.sock *.o *~ libstore.a testout.log
 		rm -rf data/
 
-cleanall: clean
-	\rm -f *.o *~ libstore.a
-
-test:
-	make cleanall
+testInternal:
+	make clean
 	make all
 	./server -&
 	./test.sh 	
 	killall -w server
+	@echo "**** test superato"
+
+test:
+	./test.sh
 	@echo "**** test superato"

@@ -308,6 +308,9 @@ int icl_hash_destroy(icl_hash_t* ht,
     }
   }
 
+  if (ht->listrwlockes)
+    free(ht->listrwlockes);
+
   if (ht->buckets)
     free(ht->buckets);
   if (ht)

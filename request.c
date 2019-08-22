@@ -20,6 +20,11 @@ void initTable() {
   CHECKNULL(usersTable, icl_hash_create(1024, NULL, NULL), "Create hashtable");
 }
 
+void freeTable(){
+  int ret=0;
+  SYSCALL(ret,icl_hash_destroy(usersTable,free,free),"destroy table");
+}
+
 int handle_register(char* name) {
   char* nameForTable;
   CHECKNULL(nameForTable, calloc(strlen(name) + 1, sizeof(char)),
@@ -81,7 +86,7 @@ int handle_retrive(char* path, char** res) {
 
   char* buf = calloc(size + 1, sizeof(char));
   while (readn < size) {
-    size_t tempReadn = 0;
+    int tempReadn = 0;
     SYSCALL(tempReadn, fread(buf + readn, sizeof(char), size - readn, file),
             "fread retrive");
     if (tempReadn == 0) {
@@ -122,9 +127,8 @@ static int internal_stats(const char* fpath,
 }
 
 void handle_print_stats() {
-  int err = nftw("data", &internal_stats, 32, 0);
-  if (err < 0)
-    perror("data");
+  int err;
+  SYSCALL(err, nftw("data", &internal_stats, 32, 0), "nftw on data");
 
   pthread_mutex_lock(&(usersTable->fieldMutex));
   printf("Clients connected: %zu\n", usersTable->nentries);

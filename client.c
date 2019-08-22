@@ -16,8 +16,8 @@ int nretrives = 0;
 int ndeletes = 0;
 int successes = 0;
 int failures = 0;
-size_t kbytesStores = 0;
-size_t kbytesRetrives = 0;
+size_t bytesStores = 0;
+size_t bytesRetrives = 0;
 
 void store(char* file) {
   char incStr[4996] = "";
@@ -47,7 +47,7 @@ void store(char* file) {
       perror("store");
       failures++;
     } else {
-      kbytesStores += strlen(testStr);
+      bytesStores += strlen(testStr);
       successes++;
     }
     free(testStr);
@@ -67,8 +67,8 @@ void retrive(char* file) {
       failures++;
     } else {
       size_t lendata = strlen(data);
-      kbytesRetrives += lendata;
-      lendata == (i * 4995 + 100) ? successes++ : failures++;
+      bytesRetrives += lendata;
+      lendata == (size_t)(i * 4995 + 100) ? successes++ : failures++;
     }
     free(data);
   }
@@ -118,15 +118,12 @@ int main(int argc, char* argv[]) {
     return -1;
   }
 
-  kbytesStores /= 1000;
-  kbytesRetrives /= 1000;
-
   printf(
       "---Client: %s\n---Stores: %d\n---Retrives: %d\n---Deletes: %"
       "d\n---Successes: %d\n---Failures: %d\n---Stored "
-      "KB: %zu\n---Retrived KB: %zu\n\n",
-      argv[1], nstores, nretrives, ndeletes, successes, failures, kbytesStores,
-      kbytesRetrives);
+      "bytes: %zu\n---Retrived bytes: %zu\n\n",
+      argv[1], nstores, nretrives, ndeletes, successes, failures, bytesStores,
+      bytesRetrives);
   free(nameFile);
   fflush(stdout);
   return 0;
