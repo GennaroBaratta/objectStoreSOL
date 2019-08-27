@@ -9,6 +9,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <time.h>
 
@@ -33,6 +34,26 @@ volatile int worker_num = 1;
 pthread_mutex_t worker_num_mtx = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t worker_num_cond = PTHREAD_COND_INITIALIZER;
 
+static int waitForWorkers(int numworker) {
+  int ret = 0;
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
+  ts.tv_sec += MAX_WAIT_TIME_IN_SECONDS;
+  pthread_mutex_lock(&worker_num_mtx);
+  while (worker_num >= numworker && ret == 0) {
+    ret = pthread_cond_timedwait(&worker_num_cond, &worker_num_mtx, &ts);
+  }
+  if (ret != 0) {
+    if (errno == ETIMEDOUT)
+      perror("Abnormal starvation of threads. Aborting server...");
+    else if (errno == EINVAL)
+      perror("Waiting for avaiable threads");
+    fflush(stderr);
+  }
+  pthread_mutex_unlock(&worker_num_mtx);
+  return 0;
+}
+
 static void* sig_thread(void* arg) {
   sigset_t* set = arg;
   int s, sig;
@@ -50,20 +71,11 @@ static void* sig_thread(void* arg) {
         pthread_mutex_lock(&worker_stop_mtx);
         stopFlag = 1;
         pthread_mutex_unlock(&worker_stop_mtx);
-        int ret = 0;
-        struct timespec ts;
-        clock_gettime(CLOCK_REALTIME, &ts);
-        ts.tv_sec += MAX_WAIT_TIME_IN_SECONDS;
-        pthread_mutex_lock(&worker_num_mtx);
-        while (worker_num > 1 && ret == 0) {
-          ret = pthread_cond_timedwait(&worker_num_cond, &worker_num_mtx, &ts);
-        }
-        if (ret != 0) {
-          perror("Unable to terminate gracefully the worker threads");
-        }
-        pthread_mutex_unlock(&worker_num_mtx);
+        // pthread_mutex_lock(&worker_num_mtx);
+        s = waitForWorkers(2);
+        // pthread_mutex_unlock(&worker_num_mtx);
 
-        SYSCALL(s, shutdown(listenfd, SHUT_RDWR), "Error shutdowning");
+        SYSCALL(s, shutdown(listenfd, SHUT_RD), "Error shutdowning");
 
         pthread_mutex_lock(&worker_num_mtx);
         worker_num--;
@@ -143,6 +155,7 @@ void* clientHandler(void* arg) {
         }
         break;
       case STORE:
+
         // può essere NULL
         block = strtok_r(NULL, "", &tokFull);
 
@@ -157,11 +170,11 @@ void* clientHandler(void* arg) {
           break;
         }
         size_t lenLeft = len;
-        char* file;
+        void* file;
         CHECKNULL(file, calloc(len + 1, sizeof(char)), "Error on calloc file");
         if (block != NULL) {
           lenLeft -= strlen(block);
-          strcat(block, "\0");
+          //strcat(block, "\0");
           // len < BUFSIZE ? len : BUFSIZE - strlen(header)+1
           sprintf(file, "%s", block);
         }
@@ -171,11 +184,12 @@ void* clientHandler(void* arg) {
                   "Error on calloc bufferino");
         if (lenLeft > 0) {
           SYSCALL(ret, readn(fd, bufferino, lenLeft), "read file");
+          if (ret < 2)
+            printf("buff %d %s", ret, bufferino);
           if (ret > 0) {
             strcat(file, bufferino);
           }
         }
-
         CHECKNULL(pathFile,
                   calloc(strlen("data/") + strlen(name) + strlen(nameFile) + 2,
                          sizeof(char)),
@@ -244,8 +258,6 @@ void* clientHandler(void* arg) {
       default:
         printf("Error! header [%s] is not correct\n", header);
     }
-    if (strncmp(response, "|", 1) == 0)
-      printf("\tcazz\t\n");
     SYSCALL(ret, writen(fd, response, strlen(response)), "write");
     free(response);
   } while (leave != 1);
@@ -286,20 +298,13 @@ int main() {
 
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-  sigset_t set;
-
-  // block signal
-  SYSCALL(unused, sigemptyset(&set), "Error on sigemptyset");
-  SYSCALL(unused, sigaddset(&set, SIGINT), "Error on sigaddset");
-  SYSCALL(unused, sigaddset(&set, SIGQUIT), "Error on sigaddset");
-  SYSCALL(unused, sigaddset(&set, SIGUSR1), "Error on sigaddset");
-  SYSCALL(unused, sigaddset(&set, SIGTSTP), "Error on sigaddset");
-  ISZERO(unused, pthread_sigmask(SIG_BLOCK, &set, NULL), "pthread_sigmask");
-  ISZERO(unused, pthread_create(&tid[0], &attr, &sig_thread, (void*)&set),
-         "pthread_create");
   initTable();
-
-  cleanup();
+  if ((unused = unlink(SOCKNAME)) == -1) {
+    if (!(errno == ENOENT)) {
+      perror("unlink");
+      return -1;
+    }
+  }
   ISZERO(unused, atexit(cleanup), "Atexit");
   SYSCALL(listenfd, socket(AF_UNIX, SOCK_STREAM, 0), "socket");
 
@@ -325,28 +330,46 @@ int main() {
     exit(errno);
   }
 
+  sigset_t set;
+
+  // block signal
+  SYSCALL(unused, sigemptyset(&set), "Error on sigemptyset");
+  SYSCALL(unused, sigaddset(&set, SIGINT), "Error on sigaddset");
+  SYSCALL(unused, sigaddset(&set, SIGQUIT), "Error on sigaddset");
+  SYSCALL(unused, sigaddset(&set, SIGUSR1), "Error on sigaddset");
+  SYSCALL(unused, sigaddset(&set, SIGTSTP), "Error on sigaddset");
+  ISZERO(unused, pthread_sigmask(SIG_BLOCK, &set, NULL), "pthread_sigmask");
+  ISZERO(unused, pthread_create(&tid[0], &attr, &sig_thread, (void*)&set),
+         "pthread_create");
   long connfd;
 
   pthread_mutex_lock(&worker_stop_mtx);
-  while (!stopFlag) {
+  while (stopFlag == 0) {
     pthread_mutex_unlock(&worker_stop_mtx);
     if ((connfd = accept(listenfd, (struct sockaddr*)NULL, NULL)) == -1) {
-      if (!(errno == EAGAIN || errno == EWOULDBLOCK || errno == EINVAL)) {
+      if (!(errno == EAGAIN || errno == EWOULDBLOCK)) {
+        if (errno == EINVAL) {
+          printf("Listen socket isn't listening, closing server...\n");
+          break;
+        }
         perror("accept");
       }
     } else {
-      int ret = 0;
-      struct timespec ts;
-      clock_gettime(CLOCK_REALTIME, &ts);
-      ts.tv_sec += MAX_WAIT_TIME_IN_SECONDS;
+      unused = waitForWorkers(NUM_THREADS);
+      if (unused != 0) {
+        printf("cazz");
+        break;
+      }
+      // timer on block receiving from client
+      struct timeval tv;
+      tv.tv_sec = 2;
+      tv.tv_usec = 0;
+      if (setsockopt(connfd, SOL_SOCKET, SO_RCVTIMEO, (struct timeval*)&tv,
+                     sizeof(struct timeval))) {
+        perror("setsockopt: rcvtimeo");
+        exit(1);
+      }
       pthread_mutex_lock(&worker_num_mtx);
-      if (worker_num >= NUM_THREADS) {
-        ret = pthread_cond_timedwait(&worker_num_cond, &worker_num_mtx, &ts);
-      }
-      if (ret != 0) {
-        perror("Abnormal starvation of threads. Aborting server...");
-        exit(EXIT_FAILURE);
-      }
       pthread_create(&tid[worker_num], &attr, &clientHandler, (void*)connfd);
       worker_num++;
       pthread_mutex_unlock(&worker_num_mtx);
@@ -354,14 +377,9 @@ int main() {
 
     pthread_mutex_lock(&worker_stop_mtx);
   }
-  pthread_mutex_unlock(&worker_stop_mtx);
   pthread_attr_destroy(&attr);
 
-  pthread_mutex_lock(&worker_num_mtx);
-  while (worker_num > 0) {
-    pthread_cond_wait(&worker_num_cond, &worker_num_mtx);
-  }
-  pthread_mutex_unlock(&worker_num_mtx);
+  waitForWorkers(1);
   SYSCALL(unused, close(listenfd), "Error on close");
   exit(EXIT_SUCCESS);
 }

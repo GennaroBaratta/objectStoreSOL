@@ -1,6 +1,6 @@
 CC			= gcc
 AR			= ar
-CFLAGS		+= -std=c99 -Wall -Wextra -pedantic -g -DMAKE_VALGRIND_HAPPY -fsanitize=address
+CFLAGS		+= -std=c99 -Wall -Wextra -pedantic -g -DMAKE_VALGRIND_HAPPY -fsanitize=thread
 ARFLAGS		= rvs
 INCLUDES	= -I.
 LDFLAGS		= -L.
@@ -8,7 +8,8 @@ OPTFLAGS	= -Og
 LIBS		= -pthread
 
 TARGETS		= server \
-			  client
+			  client \
+			  imgclient
 
 OBJECTS		= clientLibrary.o \
 				communication.o \
@@ -39,6 +40,10 @@ server: server.o libstore.a
 client: client.o libstore.a
 		$(CC) $(CFLAGS) $(INCLUDES) $(OPTFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
 
+imgclient: imgclient.o libstore.a
+		$(CC) $(CFLAGS) $(INCLUDES) $(OPTFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+
 libstore.a: $(OBJECTS)
 		$(AR) $(ARFLAGS) $@ $^
 	
@@ -51,6 +56,7 @@ testInternal:
 	make all
 	./server -&
 	./test.sh 	
+	./testsum.sh
 	killall -w server
 	@echo "**** test superato"
 

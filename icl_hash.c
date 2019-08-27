@@ -296,6 +296,8 @@ int icl_hash_destroy(icl_hash_t* ht,
     return -1;
 
   for (i = 0; i < ht->nbuckets; i++) {
+    pthread_rwlock_wrlock(
+        &(ht->listrwlockes[i % (ht->nbuckets / mutexFactor)]));
     bucket = ht->buckets[i];
     for (curr = bucket; curr != NULL;) {
       next = curr->next;
@@ -306,8 +308,11 @@ int icl_hash_destroy(icl_hash_t* ht,
       free(curr);
       curr = next;
     }
-  }
 
+    pthread_rwlock_unlock(
+        &(ht->listrwlockes[i % (ht->nbuckets / mutexFactor)]));
+  }
+  
   if (ht->listrwlockes)
     free(ht->listrwlockes);
 

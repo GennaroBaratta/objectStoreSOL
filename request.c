@@ -1,8 +1,9 @@
-//#define _POSIX_C_SOURCE 200809L
-#define _XOPEN_SOURCE 700
+#define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE 700  // for nftw (POSIX.1-2008 marks ftw() as obsolete)
 #include <assert.h>
 #include <communication.h>
 #include <dirent.h>
+#include <fcntl.h>
 #include <ftw.h>
 #include <icl_hash.h>
 #include <request.h>
@@ -20,9 +21,9 @@ void initTable() {
   CHECKNULL(usersTable, icl_hash_create(1024, NULL, NULL), "Create hashtable");
 }
 
-void freeTable(){
-  int ret=0;
-  SYSCALL(ret,icl_hash_destroy(usersTable,free,free),"destroy table");
+void freeTable() {
+  int ret = 0;
+  SYSCALL(ret, icl_hash_destroy(usersTable, free, free), "destroy table");
 }
 
 int handle_register(char* name) {
@@ -54,7 +55,21 @@ int handle_register(char* name) {
 }
 
 int handle_store(char* path, void* block, size_t len) {
-  assert(len == strlen(block));
+  int ret = remove(path);
+  if (ret < 0 && errno != ENOENT) {
+    perror("remove in store");
+    return -1;
+  }
+  int fd;
+  SYSCALL(fd,
+          open(path, O_CREAT | O_RDWR | O_APPEND,
+               S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH),
+          "open in store");
+  int written = 0;
+  SYSCALL(written, writen(fd, block, len), "write in store");
+  assert(written == len);
+  close(fd);
+  /*
   FILE* file;
 
   file = fopen(path, "w");
@@ -62,11 +77,11 @@ int handle_store(char* path, void* block, size_t len) {
     perror(path);
     return -1;
   }
-  size_t now = fwrite(block, sizeof(char), len, file);
+  size_t now = fwrite(block, sizeof(void), len, file);
 
   assert(now == len);
   fclose(file);
-
+*/
   return 0;
 }
 

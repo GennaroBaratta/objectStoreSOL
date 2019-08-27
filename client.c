@@ -44,7 +44,7 @@ void store(char* file) {
     sprintf(testStr, "%s%sFINE", strBegin, incStrTot);
     nstores++;
     if (os_store(nameFile, testStr, strlen(testStr)) == -1) {
-      perror("store");
+      fprintf(stderr, "Error on os_store()");
       failures++;
     } else {
       bytesStores += strlen(testStr);

@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <clientLibrary.h>
 #include <string.h>
+#include <sys/time.h>
 
 int sockfd;
 int notused, n;
@@ -17,7 +18,7 @@ int os_connect(char* name) {
   SYSCALL(notused,
           connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)),
           "connect");
-
+          
   char buf[BUFSIZE] = "";
   sprintf(buf, "REGISTER %s \n", name);
 
@@ -40,13 +41,13 @@ int os_disconnect() {
 
 int os_store(char* name, void* block, size_t len) {
   assert(block);
+  // len = strnlen(block, len);
   char buf[BUFSIZE] = "";
 
   sprintf(buf, "STORE %s %zu \n", name, len);
 
   SYSCALL(notused, writen(sockfd, buf, strlen(buf)), "writen client");
   SYSCALL(notused, writen(sockfd, block, len), "writen client");
-
   memset(buf, 0, BUFSIZE);
   SYSCALL(n, read(sockfd, buf, BUFSIZE), "read client");
   // printf("result: %s\n", buf);
