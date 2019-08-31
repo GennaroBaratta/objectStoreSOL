@@ -15,18 +15,15 @@
 #define ISZERO(r, c, e) \
   if ((r = c) != 0) {   \
     perror(e);          \
-    exit(errno);        \
   }
 
 #define SYSCALL(r, c, e) \
   if ((r = c) == -1) {   \
     perror(e);           \
-    exit(errno);         \
   }
 #define CHECKNULL(r, c, e) \
   if ((r = c) == NULL) {   \
     perror(e);             \
-    exit(errno);           \
   }
 
 #if !defined(BUFSIZE)

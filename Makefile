@@ -1,6 +1,6 @@
 CC			= gcc
 AR			= ar
-CFLAGS		+= -std=c99 -Wall -Wextra -pedantic -g -DMAKE_VALGRIND_HAPPY -fsanitize=thread
+CFLAGS		+= -std=c99 -Wall -Wextra -pedantic -g -DMAKE_VALGRIND_HAPPY -fsanitize=address
 ARFLAGS		= rvs
 INCLUDES	= -I.
 LDFLAGS		= -L.
@@ -55,7 +55,8 @@ testInternal:
 	make clean
 	make all
 	./server -&
-	./test.sh 	
+	./test.sh 
+	./imgclient	 >> testout.log 
 	./testsum.sh
 	killall -w server
 	@echo "**** test superato"

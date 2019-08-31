@@ -54,7 +54,11 @@ int handle_register(char* name) {
   return -1;
 }
 
-int handle_store(char* path, void* block, size_t len) {
+int handle_store(char* path,
+                 void* block,
+                 size_t len,
+                 size_t maxLenBlock,
+                 int clientfd) {
   int ret = remove(path);
   if (ret < 0 && errno != ENOENT) {
     perror("remove in store");
@@ -65,59 +69,57 @@ int handle_store(char* path, void* block, size_t len) {
           open(path, O_CREAT | O_RDWR | O_APPEND,
                S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH),
           "open in store");
-  int written = 0;
-  SYSCALL(written, writen(fd, block, len), "write in store");
-  assert(written == len);
-  close(fd);
-  /*
-  FILE* file;
-
-  file = fopen(path, "w");
-  if (file == NULL) {
-    perror(path);
-    return -1;
+  size_t written = 0;
+  if (block != NULL) {
+    written = write(fd, block, len < maxLenBlock ? len : maxLenBlock);
   }
-  size_t now = fwrite(block, sizeof(void), len, file);
-
-  assert(now == len);
-  fclose(file);
-*/
+  if (written < len) {
+    size_t lenLeft = len - written;
+    void* bufferino;
+    CHECKNULL(bufferino, calloc(lenLeft, sizeof(char)),
+              "Error on calloc bufferino");
+    SYSCALL(ret, readn(clientfd, bufferino, lenLeft), "read file");
+    if (ret > 0) {
+      SYSCALL(ret, writen(fd, bufferino, lenLeft), "write2 in store");
+    } else {
+      perror("read 2 in store");
+    }
+    free(bufferino);
+  }
+  close(fd);
   return 0;
 }
 
 int handle_retrive(char* path, char** res) {
-  FILE* file;
-  file = fopen(path, "r");
-  if (file == NULL) {
-    perror(path);
-    return -1;
-  }
-  size_t readn = 0;
+  int fd;
+  SYSCALL(fd,
+          open(path, O_CREAT | O_RDWR | O_APPEND,
+               S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH),
+          "open in store");
 
-  fseek(file, 0, SEEK_END);   // seek to end of file
-  size_t size = ftell(file);  // get current file pointer
+  int readbytes = 0;
+
+  // seek to end of file
+  size_t size = lseek(fd, 0, SEEK_END);
   assert(size > 0);
-  fseek(file, 0, SEEK_SET);  // seek back to beginning of file
+  lseek(fd, 0, SEEK_SET);  // seek back to beginning of file
 
-  char* buf = calloc(size + 1, sizeof(char));
-  while (readn < size) {
-    int tempReadn = 0;
-    SYSCALL(tempReadn, fread(buf + readn, sizeof(char), size - readn, file),
-            "fread retrive");
-    if (tempReadn == 0) {
-      perror("Error retriving file");
-      break;
-    }
-    readn += tempReadn;
-  }
-  assert(readn == size);
-  *res = calloc(size + sizeof(size) + 1 + strlen("DATA  \n "), sizeof(char));
+  void* buf = malloc(size + 1);
 
-  sprintf(*res, "DATA %zu \n %s", size, buf);
+  SYSCALL(readbytes, readn(fd, buf, size), "readn in retrive");
+
+  char strSize[25];
+  sprintf(strSize, "%zu", size);
+  *res = calloc(size + strlen(strSize) + 1 + strlen("DATA  \n "), sizeof(char));
+  sprintf(*res, "DATA %s \n ", strSize);
+  size_t sizeHeader = strlen(*res);
+
+  memcpy(*res + sizeHeader, buf, size);
+  // strncat(*res, buf, size);
 
   free(buf);
-  fclose(file);
-  return 0;
+  close(fd);
+  return readbytes + sizeHeader;
 }
 
 int handle_delete(char* path) {
@@ -143,6 +145,8 @@ static int internal_stats(const char* fpath,
 
 void handle_print_stats() {
   int err;
+  dim = 0;
+  nfiles = 0;
   SYSCALL(err, nftw("data", &internal_stats, 32, 0), "nftw on data");
 
   pthread_mutex_lock(&(usersTable->fieldMutex));

@@ -10,7 +10,8 @@ int readn(long fd, void* buf, size_t size) {
         continue;
       }
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        printf("ciao");
+        printf("ciao%zu %ld\n", left,fd);
+        fflush(stdout);
         return size - left;
       }
       perror("read");
@@ -37,7 +38,7 @@ int writen(long fd, void* buf, size_t size) {
         printf("ciaone");
         return size - left;
       }
-      perror("write");
+      perror("write communication");
       return -1;
     }
     if (r == 0)

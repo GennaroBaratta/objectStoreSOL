@@ -60,3 +60,4 @@ printf "Total stored bytes: %s\n" "${totStoredKB}"
 printf "Total retrived bytes: %s\n" "${totRetrivedKB}"
 
 killall -SIGUSR1 server
+sleep 1

@@ -114,7 +114,7 @@ void* clientHandler(void* arg) {
   char header[BUFSIZE];
   int leave = 0;
 
-  char* block = NULL;
+  void* block = NULL;
 
   char name[BUFSIZE];
   char nameFile[BUFSIZE];
@@ -122,6 +122,8 @@ void* clientHandler(void* arg) {
   char* pathFile;
 
   char* res = NULL;
+
+  size_t sizeForRetrive = 0;
   do {
     pthread_mutex_lock(&worker_stop_mtx);
     if (stopFlag) {
@@ -133,11 +135,11 @@ void* clientHandler(void* arg) {
               "Error on calloc memory");
 
     memset(buf, 0, BUFSIZE);
-    // sto meno uno lo devo capire ancora
-    SYSCALL(ret, read(fd, buf, BUFSIZE - 1), "first read ");
-    if (ret < 1)
+    SYSCALL(ret, read(fd, buf, BUFSIZE), "first read ");
+    if (ret < 1) {
+      handle_disconnect(name);
       break;
-    strcat(buf, "\0");
+    }
     CHECKNULL(token, strtok_r(buf, "\n", &tokFull), "Error tokening header");
     sprintf(header, "%s", token);
 
@@ -155,7 +157,6 @@ void* clientHandler(void* arg) {
         }
         break;
       case STORE:
-
         // può essere NULL
         block = strtok_r(NULL, "", &tokFull);
 
@@ -169,43 +170,25 @@ void* clientHandler(void* arg) {
           strcpy(response, "KO error on data length\n");
           break;
         }
-        size_t lenLeft = len;
-        void* file;
-        CHECKNULL(file, calloc(len + 1, sizeof(char)), "Error on calloc file");
-        if (block != NULL) {
-          lenLeft -= strlen(block);
-          //strcat(block, "\0");
-          // len < BUFSIZE ? len : BUFSIZE - strlen(header)+1
-          sprintf(file, "%s", block);
-        }
-
-        char* bufferino;
-        CHECKNULL(bufferino, calloc(lenLeft + 1, sizeof(char)),
-                  "Error on calloc bufferino");
-        if (lenLeft > 0) {
-          SYSCALL(ret, readn(fd, bufferino, lenLeft), "read file");
-          if (ret < 2)
-            printf("buff %d %s", ret, bufferino);
-          if (ret > 0) {
-            strcat(file, bufferino);
-          }
-        }
         CHECKNULL(pathFile,
                   calloc(strlen("data/") + strlen(name) + strlen(nameFile) + 2,
                          sizeof(char)),
                   "Error on calloc pathFile");
 
         sprintf(pathFile, "data/%s/%s", name, nameFile);
-
-        ret = handle_store(pathFile, file, len);
+        // potential len, i cannot use strlen on void*
+        size_t maxLenBlock = BUFSIZE - 1 - strlen(header);  // 2=\n-1 in first
+                                                            // read
+        // insted of read the rest of data and concatenate in a new block, i'll
+        // read the rest of potential data in handle_store, concatenating
+        // directly on the file. A little problem of separation of concerns
+        ret = handle_store(pathFile, block, len, maxLenBlock, fd);
         if (ret == 0) {
           strcpy(response, "OK \n");
         } else {
           strcpy(response, "KO \n");
         }
         free(pathFile);
-        free(file);
-        free(bufferino);
         break;
       case RETRIVE:
 
@@ -220,7 +203,8 @@ void* clientHandler(void* arg) {
         sprintf(pathFile, "data/%s/%s", name, nameFile);
 
         ret = handle_retrive(pathFile, &res);
-        if (ret == 0) {
+        if (ret > 0) {
+          sizeForRetrive = ret;
           response = res;
         } else {
           sprintf(response, "KO \n");
@@ -258,7 +242,13 @@ void* clientHandler(void* arg) {
       default:
         printf("Error! header [%s] is not correct\n", header);
     }
-    SYSCALL(ret, writen(fd, response, strlen(response)), "write");
+    if (sizeForRetrive == 0) {
+      SYSCALL(ret, writen(fd, response, strlen(response)), "write");
+    } else {
+      SYSCALL(ret, writen(fd, response, sizeForRetrive), "write");
+      sizeForRetrive = 0;
+    }
+
     free(response);
   } while (leave != 1);
 
